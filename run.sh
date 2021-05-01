@@ -9,6 +9,6 @@ echo "tmdb_key: $TMDB_KEY" >> config.yaml
 # Run
 while :
 do
-    python plex_collections.py run posters
+    python plex_collections.py run
     sleep $SCAN_INTERVAL
 done
