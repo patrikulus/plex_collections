@@ -167,7 +167,6 @@ def update_poster(plex_collection):
             if check_posters(movie, plex_collection.ratingKey, image_type):
                 return
 
-    print("Collection Poster Not Found!")
     check_for_default_poster(plex_collection)
 
 
