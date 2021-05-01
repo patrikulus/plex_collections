@@ -15,7 +15,6 @@ WORKDIR /plex_collections
 RUN pip install -r requirements.txt
 
 COPY run.sh .
-COPY config-template.yaml .
 RUN chmod +x ./run.sh
 
 ENTRYPOINT ./run.sh
