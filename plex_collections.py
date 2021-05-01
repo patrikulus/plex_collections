@@ -302,10 +302,6 @@ def upload_images_to_plex(images, plex_collection_id, image_type):
             requests.post(CONFIG['plex_images_url'] % (plex_collection_id, image_type, image), data={},
                           headers=CONFIG['headers'])
 
-            if plex_selected_image == '':
-                plex_selected_image = \
-                    get_plex_image_url(CONFIG['plex_images_url'] % (plex_collection_id, image_type, image))
-
         bar.finish()
 
         # set the highest rated image as selected again
