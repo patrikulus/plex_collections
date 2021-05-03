@@ -148,7 +148,7 @@ def list_libraries():
 
 def update_summary(plex_collection):
     if not FORCE and plex_collection.summary.strip() != '':
-        print('Summary Exists.')
+        print('Summary exists.')
         if DEBUG:
             print(plex_collection.summary)
         return
@@ -156,17 +156,17 @@ def update_summary(plex_collection):
     summary = get_tmdb_summary(plex_collection)
 
     if not summary:
-        print('No Summary Available.')
+        print('No summary available.')
         return
 
     if DRY_RUN:
-        print("Would Update Summary With: " + summary)
+        print("Would update summary With: " + summary)
         return True
 
     requests.put(CONFIG['plex_summary_url'] %
                  (plex_collection.librarySectionID, plex_collection.ratingKey, parse.quote(summary)),
                  data={}, headers=CONFIG['headers'])
-    print('Summary Updated.')
+    print('Summary updated.')
 
 
 def get_tmdb_summary(plex_collection_movies):
@@ -206,21 +206,21 @@ def check_image(media_part, image_type, plex_collection_id, metadata_type):
 
     if image_path != '':
         if DEBUG:
-            print("%s Collection %s Exists" % image_type.capitalize(), singularize(metadata_type))
+            print("%s Collection %s exists" % image_type, singularize(metadata_type))
         key = get_sha1(image_path)
         image_exists = check_if_image_is_uploaded(key, plex_collection_id, metadata_type)
 
         if image_exists:
-            print("Using %s Collection %s" % image_type.capitalize(), singularize(metadata_type))
+            print("Using %s collection %s" % image_type, singularize(metadata_type))
             return True
 
         if DRY_RUN:
-            print("Would Set %s Collection %s: %s" % (image_type.capitalize(), singularize(metadata_type), image_path))
+            print("Would set %s collection %s: %s" % (image_type, singularize(metadata_type), image_path))
             return True
 
         requests.post(CONFIG['plex_images_upload_url'] % (plex_collection_id, metadata_type),
                       data=open(image_path, 'rb'), headers=CONFIG['headers'])
-        print(image_type.capitalize() + " Collection %s Set" % metadata_type)
+        print(image_type.capitalize() + " collection %s set" % metadata_type)
         return True
 
 def check_if_image_is_uploaded(key, plex_collection_id, metadata_type):
@@ -232,7 +232,7 @@ def check_if_image_is_uploaded(key, plex_collection_id, metadata_type):
                 return True
         if image.get('ratingKey') == key_prefix + key:
             if DRY_RUN:
-                print("Would Change Selected %s to: " % singularize(metadata_type) + image.get('ratingKey'))
+                print("Would change selected %s to: " % singularize(metadata_type) + image.get('ratingKey'))
                 return True
 
             requests.put(CONFIG['plex_images_url'] % (plex_collection_id, singularize(metadata_type), image.get('ratingKey')),
@@ -247,19 +247,21 @@ def check_for_default_image(plex_collection, metadata_type):
     if int(images.get('size')) > 0:
         for image in images.get('Metadata'):
             if image.get('selected') and image.get('ratingKey') != 'default://':
+                print(("%s exists." % singularize(metadata_type)).capitalize())
                 return True
             if first_non_default_image == '' and image.get('ratingKey') != 'default://':
                 first_non_default_image = image.get('ratingKey')
 
         if first_non_default_image != '':
-            print('Default Plex Generated %s Detected' % singularize(metadata_type))
+            print('Default Plex generated %s detected' % singularize(metadata_type))
 
             if DRY_RUN:
-                print("Would Change Selected %s to: " % singularize(metadata_type) + first_non_default_image)
+                print("Would change selected %s to: " % singularize(metadata_type) + first_non_default_image)
                 return True
 
             requests.put(CONFIG['plex_images_url'] % (plex_collection_id, singularize(metadata_type), first_non_default_image),
                         data={}, headers=CONFIG['headers'])
+            print(("%s updated with exising file." % singularize(metadata_type)).capitalize())
             return True
     else:
         download_image(plex_collection, metadata_type)
@@ -313,8 +315,8 @@ def upload_images_to_plex(images, plex_collection_id, image_type):
     if images:
         if DRY_RUN:
             for image in images:
-                print("Would Upload image: " + image)
-            print("Would Change Selected image to: " + images[-1])
+                print("Would upload image: " + image)
+            print("Would change selected image to: " + images[-1])
             return True
 
         plex_selected_image = ''
@@ -330,6 +332,9 @@ def upload_images_to_plex(images, plex_collection_id, image_type):
         # set the highest rated image as selected again
         requests.put(CONFIG['plex_images_url'] % (plex_collection_id, image_type[:-1], plex_selected_image),
                      data={}, headers=CONFIG['headers'])
+        print(("%s updated with new downloaded file." % singularize(image_type)).capitalize())
+    else:
+        print("No %s available." % singularize(image_type))
 
 
 def get_plex_image_url(plex_images_url):
@@ -411,7 +416,7 @@ def run(debug, dry_run, force, library, area):
         area = DEFAULT_AREAS
 
     init(debug, dry_run, force, library)
-    print('\r\nUpdating Collection %s' % ' and '.join(map(lambda x: x.capitalize(), area)))
+    print('\r\nUpdating collection %s' % ' and '.join(map(lambda x: x.capitalize(), area)))
     update(area)
 
 
