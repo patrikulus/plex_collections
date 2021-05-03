@@ -7,14 +7,10 @@ ENV PLEX_URL=http://localhost:32400
 ENV PLEX_TOKEN=""
 ENV SCAN_INTERVAL=300
 
-WORKDIR /
-
-RUN git clone https://github.com/patrikulus/plex_collections.git
-
 WORKDIR /plex_collections
-RUN pip install -r requirements.txt
+COPY plex_collections.py requirements.txt run.sh ./
 
-COPY run.sh .
-RUN chmod +x ./run.sh
+RUN pip install -r requirements.txt
+RUN chmod +x plex_collections.py run.sh
 
 ENTRYPOINT ./run.sh
