@@ -44,6 +44,10 @@ Required values:
     - Filename of local posters without the file extension (default: movieset-poster)
  - Custom Poster Filename
     - Filename of custom posters without the file extension (default: movieset-poster-custom)
+ - Local Background Filename
+    - Filename of local backgrounds without the file extension (default: movieset-background)
+ - Custom Background Filename
+    - Filename of custom backgrounds without the file extension (default: movieset-background-custom)
 
 ### list
 Used to list all available Libraries (useful for easily obtaining a libraries ID)
@@ -55,11 +59,14 @@ Update Collections, by default it will update both posters and summaries but can
 passing them as arguments. Can also be used with `--dry-run` to test before making changes, or `--library` to update 
 only a specific libraries collections.
 
-    # Both posters and summaries
+    # All - posters, backgrounds and summaries
     python plex_collections.py run
     
     # Just posters
     python plex_collections.py run posters
+
+    # Just backgrounds
+    python plex_collections.py run backgrounds
     
     # Just summaries
     python plex_collections.py run summaries
