@@ -16,8 +16,9 @@ from tmdbv3api import Configuration as TMDBConfiguration
 from progress.bar import Bar
 
 CONFIG_FILE = 'config.yaml'
-POSTER_ITEM_LIMIT = 5
-DEFAULT_AREAS = ['posters', 'summaries']
+POSTER_ITEM_LIMIT = 1
+BACKDROP_ITEM_LIMIT = 1
+DEFAULT_AREAS = ['posters', 'backgrounds', 'summaries']
 DEBUG = False
 DRY_RUN = False
 FORCE = False
@@ -116,6 +117,9 @@ def update(areas):
             if 'posters' in areas:
                 update_poster(plex_collection)
 
+            if 'backgrounds' in areas:
+                update_background(plex_collection)
+
             if 'summaries' in areas:
                 update_summary(plex_collection)
 
@@ -169,11 +173,26 @@ def update_poster(plex_collection):
 
     check_for_default_poster(plex_collection)
 
+def update_background(plex_collection):
+    poster_found = False
+    for image_type in ['custom', 'local']:
+        for movie in plex_collection.children:
+            if check_backgrounds(movie, plex_collection.ratingKey, image_type):
+                return
+
+    check_for_default_background(plex_collection)
+
 
 def check_posters(movie, plex_collection_id, image_type):
     for media in movie.media:
         for media_part in media.parts:
             if check_poster(media_part, image_type, plex_collection_id):
+                return True
+
+def check_backgrounds(movie, plex_collection_id, image_type):
+    for media in movie.media:
+        for media_part in media.parts:
+            if check_background(media_part, image_type, plex_collection_id):
                 return True
 
 
@@ -205,6 +224,34 @@ def check_poster(media_part, image_type, plex_collection_id):
         print(image_type.capitalize() + " Collection Poster Set")
         return True
 
+def check_background(media_part, image_type, plex_collection_id):
+    file_path = str(os.path.dirname(media_part.file)) + os.path.sep + str(CONFIG[image_type + '_background_filename'])
+    background_path = ''
+
+    if os.path.isfile(file_path + '.jpg'):
+        background_path = file_path + '.jpg'
+    elif os.path.isfile(file_path + '.png'):
+        background_path = file_path + '.png'
+
+    if background_path != '':
+        if DEBUG:
+            print("%s Collection Background Exists" % image_type.capitalize())
+        key = get_sha1(background_path)
+        background_exists = check_if_background_is_uploaded(key, plex_collection_id)
+
+        if background_exists:
+            print("Using %s Collection Background" % image_type.capitalize())
+            return True
+
+        if DRY_RUN:
+            print("Would Set %s Collection Background: %s" % (image_type.capitalize(), background_path))
+            return True
+
+        requests.post(CONFIG['plex_images_upload_url'] % (plex_collection_id, 'arts'),
+                      data=open(background_path, 'rb'), headers=CONFIG['headers'])
+        print(image_type.capitalize() + " Collection Background Set")
+        return True
+
 
 def check_if_poster_is_uploaded(key, plex_collection_id):
     images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, 'posters', ''))
@@ -219,6 +266,22 @@ def check_if_poster_is_uploaded(key, plex_collection_id):
                 return True
 
             requests.put(CONFIG['plex_images_url'] % (plex_collection_id, 'poster', image.get('ratingKey')),
+                         data={}, headers=CONFIG['headers'])
+            return True
+
+def check_if_background_is_uploaded(key, plex_collection_id):
+    images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, 'arts', ''))
+    key_prefix = 'upload://arts/'
+    for image in images.get('Metadata'):
+        if image.get('selected'):
+            if image.get('ratingKey') == key_prefix + key:
+                return True
+        if image.get('ratingKey') == key_prefix + key:
+            if DRY_RUN:
+                print("Would Change Selected Background to: " + image.get('ratingKey'))
+                return True
+
+            requests.put(CONFIG['plex_images_url'] % (plex_collection_id, 'background', image.get('ratingKey')),
                          data={}, headers=CONFIG['headers'])
             return True
 
@@ -248,6 +311,31 @@ def check_for_default_poster(plex_collection):
     if int(images.get('size')) <= 1:
         download_poster(plex_collection)
 
+def check_for_default_background(plex_collection):
+    plex_collection_id = plex_collection.ratingKey
+    images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, 'arts', ''))
+    first_non_default_image = ''
+
+    if int(images.get('size')) > 0:
+        for image in images.get('Metadata'):
+            if image.get('selected') and image.get('ratingKey') != 'default://':
+                return True
+            if first_non_default_image == '' and image.get('ratingKey') != 'default://':
+                first_non_default_image = image.get('ratingKey')
+
+        if first_non_default_image != '':
+            print('Default Plex Generated Background Detected')
+
+            if DRY_RUN:
+                print("Would Change Selected Background to: " + first_non_default_image)
+                return True
+
+            requests.put(CONFIG['plex_images_url'] % (plex_collection_id, 'background', first_non_default_image),
+                        data={}, headers=CONFIG['headers'])
+            return True
+    else:
+        download_backdrop(plex_collection)
+
 
 def download_poster(plex_collection):
     plex_collection_id = plex_collection.ratingKey
@@ -256,6 +344,14 @@ def download_poster(plex_collection):
     tmdb_collection_images = Collection().images(tmdb_collection_id)
     poster_urls = get_image_urls(tmdb_collection_images, 'posters', POSTER_ITEM_LIMIT)
     upload_images_to_plex(poster_urls, plex_collection_id, 'posters')
+
+def download_backdrop(plex_collection):
+    plex_collection_id = plex_collection.ratingKey
+    tmdb_collection_id = get_tmdb_collection_id(plex_collection)
+
+    tmdb_collection_images = Collection().images(tmdb_collection_id)
+    poster_urls = get_image_urls(tmdb_collection_images, 'backdrops', BACKDROP_ITEM_LIMIT)
+    upload_images_to_plex(poster_urls, plex_collection_id, 'arts')
 
 
 def get_plex_data(url):
