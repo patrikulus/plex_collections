@@ -16,8 +16,8 @@ from tmdbv3api import Configuration as TMDBConfiguration
 from progress.bar import Bar
 
 CONFIG_FILE = 'config.yaml'
-POSTER_ITEM_LIMIT = 5
-DEFAULT_AREAS = ['posters', 'summaries']
+IMAGE_ITEM_LIMIT = 1
+DEFAULT_AREAS = ['posters', 'backgrounds', 'summaries']
 DEBUG = False
 DRY_RUN = False
 FORCE = False
@@ -81,6 +81,18 @@ def setup():
             type=str
         )
 
+        data['local_art_filename'] = click.prompt(
+            'Please enter the Local Background filename (OPTIONAL)',
+            default="movieset-background",
+            type=str
+        )
+
+        data['custom_art_filename'] = click.prompt(
+            'Please enter the Custom Poster filename (OPTIONAL)',
+            default="movieset-background-custom",
+            type=str
+        )
+
         with open(CONFIG_FILE, 'w') as outfile:
             yaml.dump(data, outfile, default_flow_style=False)
     except (KeyboardInterrupt, SystemExit):
@@ -116,6 +128,9 @@ def update(areas):
             if 'posters' in areas:
                 update_poster(plex_collection)
 
+            if 'backgrounds' in areas:
+                update_background(plex_collection)
+
             if 'summaries' in areas:
                 update_summary(plex_collection)
 
@@ -133,7 +148,7 @@ def list_libraries():
 
 def update_summary(plex_collection):
     if not FORCE and plex_collection.summary.strip() != '':
-        print('Summary Exists.')
+        print('Summary exists.')
         if DEBUG:
             print(plex_collection.summary)
         return
@@ -141,17 +156,17 @@ def update_summary(plex_collection):
     summary = get_tmdb_summary(plex_collection)
 
     if not summary:
-        print('No Summary Available.')
+        print('No summary available.')
         return
 
     if DRY_RUN:
-        print("Would Update Summary With: " + summary)
+        print("Would update summary With: " + summary)
         return True
 
     requests.put(CONFIG['plex_summary_url'] %
                  (plex_collection.librarySectionID, plex_collection.ratingKey, parse.quote(summary)),
                  data={}, headers=CONFIG['headers'])
-    print('Summary Updated.')
+    print('Summary updated.')
 
 
 def get_tmdb_summary(plex_collection_movies):
@@ -161,102 +176,113 @@ def get_tmdb_summary(plex_collection_movies):
 
 
 def update_poster(plex_collection):
-    poster_found = False
+    update_image(plex_collection, 'posters')
+
+def update_background(plex_collection):
+    update_image(plex_collection, 'arts')
+
+def update_image(plex_collection, metadata_type):
     for image_type in ['custom', 'local']:
         for movie in plex_collection.children:
-            if check_posters(movie, plex_collection.ratingKey, image_type):
+            if check_images(movie, plex_collection.ratingKey, image_type, metadata_type):
                 return
 
-    check_for_default_poster(plex_collection)
+    check_for_default_image(plex_collection, metadata_type)
 
-
-def check_posters(movie, plex_collection_id, image_type):
+def check_images(movie, plex_collection_id, image_type, metadata_type):
     for media in movie.media:
         for media_part in media.parts:
-            if check_poster(media_part, image_type, plex_collection_id):
+            if check_image(media_part, image_type, plex_collection_id, metadata_type):
                 return True
 
-
-def check_poster(media_part, image_type, plex_collection_id):
-    file_path = str(os.path.dirname(media_part.file)) + os.path.sep + str(CONFIG[image_type + '_poster_filename'])
-    poster_path = ''
+def check_image(media_part, image_type, plex_collection_id, metadata_type):
+    file_path = str(os.path.dirname(media_part.file)) + os.path.sep + str(CONFIG[image_type + '_%s_filename' % singularize(metadata_type)])
+    image_path = ''
 
     if os.path.isfile(file_path + '.jpg'):
-        poster_path = file_path + '.jpg'
+        image_path = file_path + '.jpg'
     elif os.path.isfile(file_path + '.png'):
-        poster_path = file_path + '.png'
+        image_path = file_path + '.png'
 
-    if poster_path != '':
+    if image_path != '':
         if DEBUG:
-            print("%s Collection Poster Exists" % image_type.capitalize())
-        key = get_sha1(poster_path)
-        poster_exists = check_if_poster_is_uploaded(key, plex_collection_id)
+            print("%s Collection %s exists" % image_type, singularize(metadata_type))
+        key = get_sha1(image_path)
+        image_exists = check_if_image_is_uploaded(key, plex_collection_id, metadata_type)
 
-        if poster_exists:
-            print("Using %s Collection Poster" % image_type.capitalize())
+        if image_exists:
+            print("Using %s collection %s" % image_type, singularize(metadata_type))
             return True
 
         if DRY_RUN:
-            print("Would Set %s Collection Poster: %s" % (image_type.capitalize(), poster_path))
+            print("Would set %s collection %s: %s" % (image_type, singularize(metadata_type), image_path))
             return True
 
-        requests.post(CONFIG['plex_images_upload_url'] % (plex_collection_id, 'posters'),
-                      data=open(poster_path, 'rb'), headers=CONFIG['headers'])
-        print(image_type.capitalize() + " Collection Poster Set")
+        requests.post(CONFIG['plex_images_upload_url'] % (plex_collection_id, metadata_type),
+                      data=open(image_path, 'rb'), headers=CONFIG['headers'])
+        print(image_type.capitalize() + " collection %s set" % metadata_type)
         return True
 
-
-def check_if_poster_is_uploaded(key, plex_collection_id):
-    images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, 'posters', ''))
-    key_prefix = 'upload://posters/'
+def check_if_image_is_uploaded(key, plex_collection_id, metadata_type):
+    images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, metadata_type, ''))
+    key_prefix = 'upload://%s/' % metadata_type
     for image in images.get('Metadata'):
         if image.get('selected'):
             if image.get('ratingKey') == key_prefix + key:
                 return True
         if image.get('ratingKey') == key_prefix + key:
             if DRY_RUN:
-                print("Would Change Selected Poster to: " + image.get('ratingKey'))
+                print("Would change selected %s to: " % singularize(metadata_type) + image.get('ratingKey'))
                 return True
 
-            requests.put(CONFIG['plex_images_url'] % (plex_collection_id, 'poster', image.get('ratingKey')),
+            requests.put(CONFIG['plex_images_url'] % (plex_collection_id, singularize(metadata_type), image.get('ratingKey')),
                          data={}, headers=CONFIG['headers'])
             return True
 
-
-def check_for_default_poster(plex_collection):
+def check_for_default_image(plex_collection, metadata_type):
     plex_collection_id = plex_collection.ratingKey
-    images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, 'posters', ''))
+    images = get_plex_data(CONFIG['plex_images_url'] % (plex_collection_id, metadata_type, ''))
     first_non_default_image = ''
 
-    for image in images.get('Metadata'):
-        if image.get('selected') and image.get('ratingKey') != 'default://':
+    if int(images.get('size')) > 0:
+        for image in images.get('Metadata'):
+            if image.get('selected') and image.get('ratingKey') != 'default://':
+                print(("%s exists." % singularize(metadata_type)).capitalize())
+                return True
+            if first_non_default_image == '' and image.get('ratingKey') != 'default://':
+                first_non_default_image = image.get('ratingKey')
+
+        if first_non_default_image != '':
+            print('Default Plex generated %s detected' % singularize(metadata_type))
+
+            if DRY_RUN:
+                print("Would change selected %s to: " % singularize(metadata_type) + first_non_default_image)
+                return True
+
+            requests.put(CONFIG['plex_images_url'] % (plex_collection_id, singularize(metadata_type), first_non_default_image),
+                        data={}, headers=CONFIG['headers'])
+            print(("%s updated with exising file." % singularize(metadata_type)).capitalize())
             return True
-        if first_non_default_image == '' and image.get('ratingKey') != 'default://':
-            first_non_default_image = image.get('ratingKey')
-
-    if first_non_default_image != '':
-        print('Default Plex Generated Poster Detected')
-
-        if DRY_RUN:
-            print("Would Change Selected Poster to: " + first_non_default_image)
-            return True
-
-        requests.put(CONFIG['plex_images_url'] % (plex_collection_id, 'poster', first_non_default_image),
-                     data={}, headers=CONFIG['headers'])
-        return True
-
-    if int(images.get('size')) <= 1:
-        download_poster(plex_collection)
+    else:
+        download_image(plex_collection, metadata_type)
 
 
-def download_poster(plex_collection):
+def download_image(plex_collection, metadata_type):
     plex_collection_id = plex_collection.ratingKey
     tmdb_collection_id = get_tmdb_collection_id(plex_collection)
+    tmdb_metadata_type = convert_to_tmdb(metadata_type)
 
     tmdb_collection_images = Collection().images(tmdb_collection_id)
-    poster_urls = get_image_urls(tmdb_collection_images, 'posters', POSTER_ITEM_LIMIT)
-    upload_images_to_plex(poster_urls, plex_collection_id, 'posters')
+    image_urls = get_image_urls(tmdb_collection_images, tmdb_metadata_type, IMAGE_ITEM_LIMIT)
+    upload_images_to_plex(image_urls, plex_collection_id, metadata_type)
 
+def convert_to_tmdb(metadata_type):
+    if metadata_type == 'arts':
+        return 'backdrops'
+    return metadata_type
+
+def singularize(word):
+    return word[:-1]
 
 def get_plex_data(url):
     r = requests.get(url, headers=CONFIG['headers'])
@@ -276,7 +302,7 @@ def get_image_urls(tmdb_collection_images, image_type, artwork_item_limit):
         if image['iso_639_1'] is not None and image['iso_639_1'] != 'en' and image['iso_639_1'] != TMDB.language:
             images[i]['vote_average'] = 0
 
-        # boost the score for localized posters (according to the preference)
+        # boost the score for localized images (according to the preference)
         if image['iso_639_1'] == TMDB.language:
             images[i]['vote_average'] += 1
 
@@ -289,8 +315,8 @@ def upload_images_to_plex(images, plex_collection_id, image_type):
     if images:
         if DRY_RUN:
             for image in images:
-                print("Would Upload Poster: " + image)
-            print("Would Change Selected Poster to: " + images[-1])
+                print("Would upload image: " + image)
+            print("Would change selected image to: " + images[-1])
             return True
 
         plex_selected_image = ''
@@ -306,6 +332,9 @@ def upload_images_to_plex(images, plex_collection_id, image_type):
         # set the highest rated image as selected again
         requests.put(CONFIG['plex_images_url'] % (plex_collection_id, image_type[:-1], plex_selected_image),
                      data={}, headers=CONFIG['headers'])
+        print(("%s updated with new downloaded file." % singularize(image_type)).capitalize())
+    else:
+        print("No %s available." % singularize(image_type))
 
 
 def get_plex_image_url(plex_images_url):
@@ -370,7 +399,7 @@ def command_setup():
     setup()
 
 
-@cli.command('run', help='Update Collection Posters and/or Summaries',
+@cli.command('run', help='Update Collection Posters, Backgrounds and/or Summaries',
              epilog="eg: plex_collections.py run posters --dry-run --library=5 --library=8")
 @click.argument('area', nargs=-1)
 @click.option('--debug', '-v', default=False, is_flag=True)
@@ -387,7 +416,7 @@ def run(debug, dry_run, force, library, area):
         area = DEFAULT_AREAS
 
     init(debug, dry_run, force, library)
-    print('\r\nUpdating Collection %s' % ' and '.join(map(lambda x: x.capitalize(), area)))
+    print('\r\nUpdating collection %s' % ' and '.join(map(lambda x: x.capitalize(), area)))
     update(area)
 
 
